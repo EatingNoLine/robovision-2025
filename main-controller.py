@@ -1,7 +1,8 @@
 import cv2
 import numpy as np
-from apriltag-detector import AprilTagDetector
-from led-detector import LEDDetector
+from modules import AprilTagDetector, LEDDetector
+
+from config import CAMERA_CONFIG
 
 class MainController:
     def __init__(self, config):
@@ -17,19 +18,21 @@ class MainController:
                 - display_mode: 显示模式（"both"/"apriltag"/"led"）
         """
         self.config = config
+        self.device_index = CAMERA_CONFIG.get(0, {}).get("device_index", 0)
+        self.resolution = CAMERA_CONFIG.get(0, {}).get("resolution", (640, 480))
         self._init_camera()
         self._init_detectors()
         self.running = False
 
     def _init_camera(self):
         """初始化摄像头/视频流"""
-        cam_source = self.config.get("camera_index", 0)
+        cam_source = self.device_index
         self.cap = cv2.VideoCapture(cam_source)
         if not self.cap.isOpened():
             raise RuntimeError(f"无法打开摄像头/视频：{cam_source}")
-        # 设置摄像头分辨率（可选）
-        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
-        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
+        # 设置摄像头分辨率
+        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.resolution[0])
+        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.resolution[1])
 
     def _init_detectors(self):
         """初始化AprilTag和LED检测器"""
@@ -72,7 +75,7 @@ class MainController:
 
     def start(self):
         """启动主流程"""
-        print("主控制器启动 | 按 'q' 退出 | 按 'm' 切换显示模式")
+        print("main-controller start")
         self.running = True
         current_mode = self.config.get("display_mode", "both")
         mode_list = ["both", "apriltag", "led"]
@@ -90,42 +93,39 @@ class MainController:
             # 3. 显示结果
             cv2.imshow("AprilTag + LED Detector", cv2.resize(result_frame, (1280, 720)))
 
-            # 4. 键盘交互
-            key = cv2.waitKey(1) & 0xFF
-            if key == ord('q'):
-                self.running = False
-            elif key == ord('m'):
-                # 切换显示模式
-                current_idx = mode_list.index(current_mode)
-                current_mode = mode_list[(current_idx + 1) % 3]
-                self.config["display_mode"] = current_mode
-                print(f"切换显示模式：{current_mode}")
-
         # 5. 释放资源
         self.cap.release()
         cv2.destroyAllWindows()
         print("主控制器已退出")
 
     def get_latest_results(self):
-        """获取最新检测结果（用于后续扩展，如控制逻辑）"""
+        """获取最新检测结果"""
         # 可扩展：返回AprilTag位姿、LED闪烁状态等
         return {
             "april_tag": self.april_tag_detector.detections if hasattr(self.april_tag_detector, "detections") else None,
             "led_states": self.led_detector.led_states
         }
 
-# 配置参数（根据实际场景修改）
-CONFIG = {
-    "camera_index": 0,  # 0=默认摄像头，或视频文件路径如"test.mp4"
-    "calib_file": "camera_calibration.npz",  # 相机标定文件
-    "tag_size": 0.1,  # AprilTag实际边长（米）
-    "tag_family": "tag36h11",
-    "display_mode": "both"  # 初始显示模式
+CONFIGS = {
+    0: {
+        "camera_index": 0,
+        "calib_file": "camera_calibration.npz",
+        "tag_size": 0.1,  # AprilTag实际边长（米）
+        "tag_family": "tag36h11",
+        "display_mode": "apriltag"  # 初始显示模式
+    },
+    1: {
+        "camera_index": 1,
+        "calib_file": "camera_calibration.npz",
+        "tag_size": 0.1,
+        "tag_family": "tag36h11",
+        "display_mode": "both"
+    }
 }
 
 if __name__ == "__main__":
     try:
-        controller = MainController(CONFIG)
+        controller = MainController(CONFIGS.get(0, {}))
         controller.start()
     except Exception as e:
-        print(f"程序异常：{e}")
+        print(f"Error, {e}")
